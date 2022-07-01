@@ -38,8 +38,8 @@ const ComputeMotionProgram = (gl) => {
 
   const initDataTextureSrc = [];
   for (let i = 0; i < PARTICLES; i++) {
-    initDataTextureSrc.push(0, 0, 0, 1); // particle position;
-    initDataTextureSrc.push(Math.random() * 50, 0, 0, 1); // particle velocity;
+    initDataTextureSrc.push(0, 0, 0, 0); // particle position;
+    initDataTextureSrc.push(0, 0, 0, 0); // particle velocity;
   }
   const uniforms = {
     // init with a data texture we make ourselves
