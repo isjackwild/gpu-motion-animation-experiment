@@ -526,18 +526,21 @@ var _drawProgramDefault = parcelHelpers.interopDefault(_drawProgram);
 var _computeMotionProgram = require("./compute-motion-program");
 var _computeMotionProgramDefault = parcelHelpers.interopDefault(_computeMotionProgram);
 let drawProgram, computeMotionProgram;
+// set to true to render the data texture to the screen
+const RENDER_DATA_TEXTURE_TO_SCREEN = true;
 const render = ()=>{
-    computeMotionProgram.render();
-    drawProgram.setDataTexture(computeMotionProgram.getDataTexture());
-    drawProgram.render();
+    computeMotionProgram.render(RENDER_DATA_TEXTURE_TO_SCREEN);
+    if (!RENDER_DATA_TEXTURE_TO_SCREEN) {
+        drawProgram.setDataTexture(computeMotionProgram.getDataTexture());
+        drawProgram.render();
+    }
 };
 const update = ()=>{
 };
 const animate = ()=>{
     update();
     render();
-    // requestAnimationFrame(animate);
-    setTimeout(animate, 99);
+    requestAnimationFrame(animate);
 };
 const kickIt = ()=>{
     const canvas = document.getElementsByTagName("canvas")[0];
@@ -10791,10 +10794,10 @@ const DrawProgram = (gl)=>{
 exports.default = DrawProgram;
 
 },{"twgl.js":"3uqAP","./shaders/vert.glsl":"kq7er","./shaders/frag.glsl":"c3ZTU","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"kq7er":[function(require,module,exports) {
-module.exports = "precision mediump float;\n#define GLSLIFY 1\n\nattribute vec4 position;\n\nvoid main() {\n  gl_Position = position;\n}";
+module.exports = "precision highp float;\n#define GLSLIFY 1\n\nattribute vec4 position;\nvarying vec2 vUv;\n\nvoid main() {\n  vUv = vec2((position.x + 1.0) / 2.0, (position.y + 1.0) / 2.0);\n\n  gl_Position = position;\n}";
 
 },{}],"c3ZTU":[function(require,module,exports) {
-module.exports = "precision mediump float;\n#define GLSLIFY 1\n\nuniform sampler2D uDataTexture;\n\nvoid main() {\n  vec4 texel = texture2D(uDataTexture, vec2(0.0, 0.0));\n\n  gl_FragColor = texel;\n}";
+module.exports = "precision mediump float;\n#define GLSLIFY 1\n\nuniform sampler2D uDataTexture;\nvarying vec2 vUv;\n\nvoid main() {\n  vec4 texel = texture2D(uDataTexture, vUv);\n\n  gl_FragColor = texel;\n}";
 
 },{}],"e1i39":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
@@ -10804,13 +10807,21 @@ var _vertGlsl = require("./shaders/vert.glsl");
 var _vertGlslDefault = parcelHelpers.interopDefault(_vertGlsl);
 var _computeMotionFragGlsl = require("./shaders/compute-motion.frag.glsl");
 var _computeMotionFragGlslDefault = parcelHelpers.interopDefault(_computeMotionFragGlsl);
-const PARTICLES = 1;
+const PARTICLES = 4;
+const COMPONENTS = 2; // value + speed
 const ComputeMotionProgram = (gl)=>{
     let pingPongIndex = 0;
     const frameBufferInfos = [
-        _twglJs.createFramebufferInfo(gl, null, 4, PARTICLES),
-        _twglJs.createFramebufferInfo(gl, null, 4, PARTICLES), 
+        _twglJs.createFramebufferInfo(gl, null, COMPONENTS, PARTICLES),
+        _twglJs.createFramebufferInfo(gl, null, COMPONENTS, PARTICLES), 
     ];
+    // make sure to set the filters and wrapping params for the frame buffer attachments
+    frameBufferInfos.forEach((fbo)=>{
+        _twglJs.setTextureParameters(gl, fbo.attachments[0], {
+            mag: gl.NEAREST,
+            wrap: gl.CLAMP_TO_EDGE
+        });
+    });
     const programInfo = _twglJs.createProgramInfo(gl, [
         _vertGlslDefault.default,
         _computeMotionFragGlslDefault.default
@@ -10838,12 +10849,26 @@ const ComputeMotionProgram = (gl)=>{
         ]
     }; // a unit quad
     const bufferInfo = _twglJs.createBufferInfoFromArrays(gl, arrays);
+    const initDataTextureSrc = [];
+    for(let i = 0; i < PARTICLES; i++){
+        initDataTextureSrc.push(0, 0, 0, 1); // particle value;
+        initDataTextureSrc.push(Math.random() * 255, 0, 0, 1); // particle speed;
+    }
     const uniforms = {
+        // init with a data texture we make ourselves
         uDataTexture: _twglJs.createTexture(gl, {
-            width: 1,
-            height: 1
+            width: COMPONENTS,
+            height: PARTICLES,
+            wrap: gl.CLAMP_TO_EDGE,
+            min: gl.NEAREST,
+            mag: gl.NEAREST,
+            src: initDataTextureSrc
         }),
-        uFirstFrame: 1
+        uFirstFrame: 0,
+        uResolution: [
+            COMPONENTS,
+            PARTICLES
+        ]
     };
     const doPingPongBuffers = ()=>{
         pingPongIndex++;
@@ -10854,17 +10879,37 @@ const ComputeMotionProgram = (gl)=>{
     const getDataTexture = ()=>{
         return getThisFrameBufferInfo().attachments[0];
     };
-    const render = ()=>{
+    const initDataTexturesWithRandomValues = ()=>{
         gl.useProgram(programInfo.program);
         _twglJs.setBuffersAndAttributes(gl, programInfo, bufferInfo);
         _twglJs.setUniforms(programInfo, uniforms);
-        // render to data texture
-        _twglJs.bindFramebufferInfo(gl, getThisFrameBufferInfo());
+        _twglJs.bindFramebufferInfo(gl, frameBufferInfos[0]);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        _twglJs.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
+        _twglJs.bindFramebufferInfo(gl, frameBufferInfos[1]);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         _twglJs.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
         uniforms.uDataTexture = getDataTexture();
+        uniforms.uFirstFrame = 0;
         doPingPongBuffers();
     };
+    const render = (renderToScreen = false)=>{
+        gl.useProgram(programInfo.program);
+        _twglJs.setBuffersAndAttributes(gl, programInfo, bufferInfo);
+        _twglJs.setUniforms(programInfo, uniforms);
+        _twglJs.bindFramebufferInfo(gl, getThisFrameBufferInfo());
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        _twglJs.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
+        if (renderToScreen) {
+            _twglJs.bindFramebufferInfo(gl, null);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            _twglJs.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
+        }
+        // set the data texture we just drew to as the input data texture, and then ping pong buffers
+        uniforms.uDataTexture = getDataTexture();
+        doPingPongBuffers();
+    };
+    initDataTexturesWithRandomValues();
     return {
         render,
         getDataTexture
@@ -10873,7 +10918,7 @@ const ComputeMotionProgram = (gl)=>{
 exports.default = ComputeMotionProgram;
 
 },{"twgl.js":"3uqAP","./shaders/vert.glsl":"kq7er","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./shaders/compute-motion.frag.glsl":"c4xJD"}],"c4xJD":[function(require,module,exports) {
-module.exports = "precision mediump float;\n#define GLSLIFY 1\n\nuniform sampler2D uDataTexture;\n\nvoid main() {\n  vec4 texel = texture2D(uDataTexture, vec2(0.5, 0.5));\n  texel.r += 0.1;\n  texel.r = clamp(texel.r, 0.0, 1.0);\n\n  gl_FragColor = texel;\n}";
+module.exports = "precision highp float;\n#define GLSLIFY 1\n\nuniform sampler2D uDataTexture;\nuniform vec2 uResolution;\nuniform float uFirstFrame;\n\nvarying vec2 vUv;\n\nfloat rand(vec2 co) {\n  return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);\n}\n\nfloat getParticleSpeed(float particleIndex) {\n  vec2 uv = vec2(1.0, particleIndex / uResolution.y);\n  vec4 texel = texture2D(uDataTexture, uv);\n\n  return texel.r;\n}\n\nfloat getParticleValue(float particleIndex) {\n  vec2 uv = vec2(0.0, particleIndex / uResolution.y);\n  vec4 texel = texture2D(uDataTexture, uv);\n\n  return texel.r;\n}\n\nvoid main() {\n  vec2 texCoord = floor(uResolution * vUv);\n  float particleIndex = texCoord.y;\n\n  float value;\n\n  if(texCoord.x == 0.0) {// current value is stored in first pixel\n    value = getParticleValue(particleIndex);\n    value += getParticleSpeed(particleIndex);\n  } else if(texCoord.x == 1.0) { // speed value is stored in second pixel\n    value = getParticleSpeed(particleIndex) + rand(texCoord * 0.2) * 0.01; // just add a random value to the speed\n  }\n\n  gl_FragColor = vec4(value, 0.0, 0.0, 1.0);\n}";
 
 },{}]},["7nZVA","8lqZg"], "8lqZg", "parcelRequire94c2")
 
