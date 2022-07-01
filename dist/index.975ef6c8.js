@@ -10807,7 +10807,7 @@ var _vertGlsl = require("./shaders/vert.glsl");
 var _vertGlslDefault = parcelHelpers.interopDefault(_vertGlsl);
 var _computeMotionFragGlsl = require("./shaders/compute-motion.frag.glsl");
 var _computeMotionFragGlslDefault = parcelHelpers.interopDefault(_computeMotionFragGlsl);
-const PARTICLES = 4;
+const PARTICLES = 100;
 const COMPONENTS = 2; // value + speed
 const ComputeMotionProgram = (gl)=>{
     let pingPongIndex = 0;
@@ -10852,7 +10852,7 @@ const ComputeMotionProgram = (gl)=>{
     const initDataTextureSrc = [];
     for(let i = 0; i < PARTICLES; i++){
         initDataTextureSrc.push(0, 0, 0, 1); // particle value;
-        initDataTextureSrc.push(Math.random() * 255, 0, 0, 1); // particle speed;
+        initDataTextureSrc.push(Math.random() * 50, 0, 0, 1); // particle speed;
     }
     const uniforms = {
         // init with a data texture we make ourselves
@@ -10864,11 +10864,11 @@ const ComputeMotionProgram = (gl)=>{
             mag: gl.NEAREST,
             src: initDataTextureSrc
         }),
-        uFirstFrame: 0,
         uResolution: [
             COMPONENTS,
             PARTICLES
-        ]
+        ],
+        uTime: 0
     };
     const doPingPongBuffers = ()=>{
         pingPongIndex++;
@@ -10878,20 +10878,6 @@ const ComputeMotionProgram = (gl)=>{
     };
     const getDataTexture = ()=>{
         return getThisFrameBufferInfo().attachments[0];
-    };
-    const initDataTexturesWithRandomValues = ()=>{
-        gl.useProgram(programInfo.program);
-        _twglJs.setBuffersAndAttributes(gl, programInfo, bufferInfo);
-        _twglJs.setUniforms(programInfo, uniforms);
-        _twglJs.bindFramebufferInfo(gl, frameBufferInfos[0]);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        _twglJs.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
-        _twglJs.bindFramebufferInfo(gl, frameBufferInfos[1]);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        _twglJs.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
-        uniforms.uDataTexture = getDataTexture();
-        uniforms.uFirstFrame = 0;
-        doPingPongBuffers();
     };
     const render = (renderToScreen = false)=>{
         gl.useProgram(programInfo.program);
@@ -10907,9 +10893,9 @@ const ComputeMotionProgram = (gl)=>{
         }
         // set the data texture we just drew to as the input data texture, and then ping pong buffers
         uniforms.uDataTexture = getDataTexture();
+        uniforms.uTime += 1;
         doPingPongBuffers();
     };
-    initDataTexturesWithRandomValues();
     return {
         render,
         getDataTexture
@@ -10918,7 +10904,7 @@ const ComputeMotionProgram = (gl)=>{
 exports.default = ComputeMotionProgram;
 
 },{"twgl.js":"3uqAP","./shaders/vert.glsl":"kq7er","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./shaders/compute-motion.frag.glsl":"c4xJD"}],"c4xJD":[function(require,module,exports) {
-module.exports = "precision highp float;\n#define GLSLIFY 1\n\nuniform sampler2D uDataTexture;\nuniform vec2 uResolution;\nuniform float uFirstFrame;\n\nvarying vec2 vUv;\n\nfloat rand(vec2 co) {\n  return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);\n}\n\nfloat getParticleSpeed(float particleIndex) {\n  vec2 uv = vec2(1.0, particleIndex / uResolution.y);\n  vec4 texel = texture2D(uDataTexture, uv);\n\n  return texel.r;\n}\n\nfloat getParticleValue(float particleIndex) {\n  vec2 uv = vec2(0.0, particleIndex / uResolution.y);\n  vec4 texel = texture2D(uDataTexture, uv);\n\n  return texel.r;\n}\n\nvoid main() {\n  vec2 texCoord = floor(uResolution * vUv);\n  float particleIndex = texCoord.y;\n\n  float value;\n\n  if(texCoord.x == 0.0) {// current value is stored in first pixel\n    value = getParticleValue(particleIndex);\n    value += getParticleSpeed(particleIndex);\n  } else if(texCoord.x == 1.0) { // speed value is stored in second pixel\n    value = getParticleSpeed(particleIndex) + rand(texCoord * 0.2) * 0.01; // just add a random value to the speed\n  }\n\n  gl_FragColor = vec4(value, 0.0, 0.0, 1.0);\n}";
+module.exports = "precision highp float;\n#define GLSLIFY 1\n\nuniform sampler2D uDataTexture;\nuniform vec2 uResolution;\nuniform float uTime;\n\nvarying vec2 vUv;\n\nfloat rand(vec2 co) {\n  return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);\n}\n\nfloat getParticleSpeed(float particleIndex) {\n  vec2 uv = vec2(1.0, particleIndex / uResolution.y);\n  vec4 texel = texture2D(uDataTexture, uv);\n\n  return texel.r;\n}\n\nfloat getParticleValue(float particleIndex) {\n  vec2 uv = vec2(0.0, particleIndex / uResolution.y);\n  vec4 texel = texture2D(uDataTexture, uv);\n\n  return texel.r;\n}\n\nvoid main() {\n  vec2 texCoord = floor(uResolution * vUv);\n  float particleIndex = texCoord.y;\n\n  float value;\n\n  if(texCoord.x == 0.0) {// current value is stored in first pixel\n    value = getParticleValue(particleIndex);\n    value += getParticleSpeed(particleIndex);\n    value = clamp(value, 0.0, 1.0);\n  } else if(texCoord.x == 1.0) { // speed value is stored in second pixel\n    float random = (rand(vec2(particleIndex, uTime)) * 2.0) - 1.0;\n\n    value = getParticleSpeed(particleIndex) + random * 0.01; // just add a random value to the speed\n  }\n\n  gl_FragColor = vec4(value, 0.0, 0.0, 1.0);\n}";
 
 },{}]},["7nZVA","8lqZg"], "8lqZg", "parcelRequire94c2")
 

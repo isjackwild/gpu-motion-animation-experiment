@@ -13,7 +13,7 @@ import {
 import vert from "./shaders/vert.glsl";
 import frag from "./shaders/compute-motion.frag.glsl";
 
-const PARTICLES = 4;
+const PARTICLES = 100;
 const COMPONENTS = 1 + 1; // value + speed
 
 const ComputeMotionProgram = (gl) => {
@@ -39,7 +39,7 @@ const ComputeMotionProgram = (gl) => {
   const initDataTextureSrc = [];
   for (let i = 0; i < PARTICLES; i++) {
     initDataTextureSrc.push(0, 0, 0, 1); // particle value;
-    initDataTextureSrc.push(Math.random() * 255, 0, 0, 1); // particle speed;
+    initDataTextureSrc.push(Math.random() * 50, 0, 0, 1); // particle speed;
   }
   const uniforms = {
     // init with a data texture we make ourselves
@@ -51,8 +51,8 @@ const ComputeMotionProgram = (gl) => {
       mag: gl.NEAREST,
       src: initDataTextureSrc,
     }),
-    uFirstFrame: 0,
     uResolution: [COMPONENTS, PARTICLES],
+    uTime: 0,
   };
 
   const doPingPongBuffers = () => {
@@ -65,25 +65,6 @@ const ComputeMotionProgram = (gl) => {
 
   const getDataTexture = () => {
     return getThisFrameBufferInfo().attachments[0];
-  };
-
-  const initDataTexturesWithRandomValues = () => {
-    gl.useProgram(programInfo.program);
-
-    setBuffersAndAttributes(gl, programInfo, bufferInfo);
-    setUniforms(programInfo, uniforms);
-
-    bindFramebufferInfo(gl, frameBufferInfos[0]);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
-
-    bindFramebufferInfo(gl, frameBufferInfos[1]);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
-
-    uniforms.uDataTexture = getDataTexture();
-    uniforms.uFirstFrame = 0;
-    doPingPongBuffers();
   };
 
   const render = (renderToScreen = false) => {
@@ -104,10 +85,9 @@ const ComputeMotionProgram = (gl) => {
 
     // set the data texture we just drew to as the input data texture, and then ping pong buffers
     uniforms.uDataTexture = getDataTexture();
+    uniforms.uTime += 1;
     doPingPongBuffers();
   };
-
-  initDataTexturesWithRandomValues();
 
   return { render, getDataTexture };
 };

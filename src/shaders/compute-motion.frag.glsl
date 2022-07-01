@@ -2,7 +2,7 @@ precision highp float;
 
 uniform sampler2D uDataTexture;
 uniform vec2 uResolution;
-uniform float uFirstFrame;
+uniform float uTime;
 
 varying vec2 vUv;
 
@@ -33,8 +33,11 @@ void main() {
   if(texCoord.x == 0.0) {// current value is stored in first pixel
     value = getParticleValue(particleIndex);
     value += getParticleSpeed(particleIndex);
+    value = clamp(value, 0.0, 1.0);
   } else if(texCoord.x == 1.0) { // speed value is stored in second pixel
-    value = getParticleSpeed(particleIndex) + rand(texCoord * 0.2) * 0.01; // just add a random value to the speed
+    float random = (rand(vec2(particleIndex, uTime)) * 2.0) - 1.0;
+
+    value = getParticleSpeed(particleIndex) + random * 0.01; // just add a random value to the speed
   }
 
   gl_FragColor = vec4(value, 0.0, 0.0, 1.0);
