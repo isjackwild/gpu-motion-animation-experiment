@@ -14,7 +14,7 @@ import vert from "./shaders/vert.glsl";
 import frag from "./shaders/compute-motion.frag.glsl";
 
 const PARTICLES = 100;
-const COMPONENTS = 1 + 1; // value + speed
+const COMPONENTS = 1 + 1; // 1D position + 1D velocity
 
 const ComputeMotionProgram = (gl) => {
   let pingPongIndex = 0;
@@ -38,8 +38,8 @@ const ComputeMotionProgram = (gl) => {
 
   const initDataTextureSrc = [];
   for (let i = 0; i < PARTICLES; i++) {
-    initDataTextureSrc.push(0, 0, 0, 1); // particle value;
-    initDataTextureSrc.push(Math.random() * 50, 0, 0, 1); // particle speed;
+    initDataTextureSrc.push(0, 0, 0, 1); // particle position;
+    initDataTextureSrc.push(Math.random() * 50, 0, 0, 1); // particle velocity;
   }
   const uniforms = {
     // init with a data texture we make ourselves

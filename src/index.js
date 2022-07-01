@@ -5,7 +5,7 @@ import ComputeMotionProgram from "./compute-motion-program";
 let drawProgram, computeMotionProgram;
 
 // set to true to render the data texture to the screen
-const RENDER_DATA_TEXTURE_TO_SCREEN = true;
+const RENDER_DATA_TEXTURE_TO_SCREEN = false;
 
 const render = () => {
   computeMotionProgram.render(RENDER_DATA_TEXTURE_TO_SCREEN);
